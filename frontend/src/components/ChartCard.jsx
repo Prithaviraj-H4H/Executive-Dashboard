@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Plot from 'react-plotly.js'
 import { Download } from 'lucide-react'
 import Plotly from 'plotly.js'
@@ -39,18 +39,31 @@ const LIGHT_LAYOUT = {
   legend: { font: { color: '#6B7280' } },
 }
 
-export default function ChartCard({ chart, filterKey, className = '', isLoading }) {
+export default function ChartCard({
+  chart,
+  filterKey,
+  className = '',
+  isLoading,
+  // Visual-level toggle props
+  toggleConfig,   // { key, options: [{value, label}] } | null
+  currentOption,  // current toggle value (string) | null
+  onOptionChange, // (key, value) => void
+  overrideChart,  // ChartData from per-chart API | null
+}) {
   const { isDark } = useTheme()
   const { applyChartFilter } = useDashboard()
-  const plotDivRef = useRef(null)
+  const [plotDiv, setPlotDiv] = useState(null)
+
+  // Prefer per-chart override when available (after toggle)
+  const activeChart = overrideChart || chart
 
   const figure = useMemo(() => {
     try {
-      return JSON.parse(chart.figure_json)
+      return JSON.parse(activeChart.figure_json)
     } catch {
       return null
     }
-  }, [chart.figure_json])
+  }, [activeChart.figure_json])
 
   const mergedLayout = useMemo(() => {
     if (!figure) return {}
@@ -69,41 +82,65 @@ export default function ChartCard({ chart, filterKey, className = '', isLoading 
     (event) => {
       if (!filterKey || !event.points?.length) return
       const point = event.points[0]
-      // Support pie labels and bar x/y values
       const value = point.label ?? point.x ?? point.y
       if (value !== undefined) applyChartFilter(filterKey, String(value))
     },
     [filterKey, applyChartFilter]
   )
 
-  const handleDownload = useCallback(async () => {
-    const el = plotDivRef.current?.el
-    if (!el) return
-    try {
-      const url = await Plotly.toImage(el, { format: 'png', width: 1400, height: 700, scale: 2 })
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${chart.chart_id}.png`
-      a.click()
-    } catch (e) {
-      console.error('Download failed', e)
-    }
-  }, [chart.chart_id])
+  const handleDownload = useCallback(() => {
+    if (!plotDiv) return
+    Plotly.downloadImage(plotDiv, {
+      format: 'png',
+      filename: activeChart.chart_id,
+      width: 1400,
+      height: 700,
+      scale: 2,
+    })
+  }, [plotDiv, activeChart.chart_id])
 
   return (
     <div className={`card flex flex-col overflow-hidden ${className}`}>
       {/* Card header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{chart.title}</h3>
-        <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between px-4 pt-3 pb-2 gap-2">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 leading-snug pt-0.5">
+          {activeChart.title}
+        </h3>
+
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          {/* Visual-level toggle (Week/Month/Quarter or Category/Sub-Category) */}
+          {toggleConfig && (
+            <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-dark-border rounded-lg p-0.5">
+              {toggleConfig.options.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => onOptionChange(toggleConfig.key, opt.value)}
+                  className={`
+                    px-2.5 py-1 text-xs font-medium rounded-md transition-all duration-150
+                    ${currentOption === opt.value
+                      ? 'bg-white dark:bg-dark-card text-brand-blue shadow-sm'
+                      : 'text-slate-500 dark:text-dark-muted hover:text-slate-700 dark:hover:text-slate-200'
+                    }
+                  `}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Click-to-filter badge */}
           {filterKey && (
-            <span className="text-xs text-brand-blue bg-brand-blue/10 px-2 py-0.5 rounded-full hidden sm:inline">
+            <span className="text-xs text-brand-blue bg-brand-blue/10 px-2 py-0.5 rounded-full hidden lg:inline">
               Click to filter
             </span>
           )}
+
+          {/* PNG download */}
           <button
             onClick={handleDownload}
-            className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-dark-border text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-dark-border
+              text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
             title="Download PNG"
           >
             <Download size={14} />
@@ -114,20 +151,19 @@ export default function ChartCard({ chart, filterKey, className = '', isLoading 
       {/* Chart body */}
       <div className="relative flex-1 min-h-0 h-72">
         {isLoading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-dark-card/60 rounded-b-xl">
-            <div className="w-8 h-8 border-3 border-brand-blue border-t-transparent rounded-full animate-spin" />
+          <div className="absolute inset-0 z-10 flex items-center justify-center
+            bg-white/60 dark:bg-dark-card/60 rounded-b-xl">
+            <div className="w-8 h-8 border-[3px] border-brand-blue border-t-transparent rounded-full animate-spin" />
           </div>
         )}
         {figure ? (
           <Plot
-            ref={plotDivRef}
             data={figure.data}
             layout={mergedLayout}
-            config={{
-              displayModeBar: false,
-              responsive: true,
-            }}
+            config={{ displayModeBar: false, responsive: true }}
             onClick={handleClick}
+            onInitialized={(_, graphDiv) => setPlotDiv(graphDiv)}
+            onUpdate={(_, graphDiv) => setPlotDiv(graphDiv)}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler
           />

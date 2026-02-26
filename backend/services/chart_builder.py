@@ -1,24 +1,36 @@
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from typing import List
+from typing import List, Dict, Any
 from models.schemas import ChartData
 
 COLORS = px.colors.qualitative.Set2
 BLUE = "#4F81BD"
 ORANGE = "#F79646"
 
+FREQ_MAP = {"week": "W", "month": "M", "quarter": "Q"}
+
+
+def _period_label(ts: pd.Timestamp, granularity: str) -> str:
+    if granularity == "week":
+        return ts.strftime("%d %b '%y")
+    elif granularity == "month":
+        return ts.strftime("%b %Y")
+    else:  # quarter
+        q = (ts.month - 1) // 3 + 1
+        return f"Q{q} {ts.year}"
+
 
 def build_all_charts(df: pd.DataFrame) -> List[ChartData]:
     builders = [
-        ("sales_profit_trend", "Sales & Profit Trend", _sales_profit_trend),
-        ("sales_by_category", "Sales by Category", _sales_by_category),
-        ("sales_by_subcategory", "Sales by Sub-Category", _sales_by_subcategory),
-        ("sales_by_market_region", "Sales by Market & Region", _sales_by_market_region),
-        ("segment_breakdown", "Sales by Customer Segment", _segment_breakdown),
-        ("top_products", "Top 10 Products by Profit", _top_products),
-        ("discount_vs_profit", "Discount vs Profit", _discount_vs_profit),
-        ("ship_mode_priority", "Ship Mode & Order Priority", _ship_mode_priority),
+        ("sales_profit_trend",    "Sales & Profit by Month",    lambda d: _sales_profit_trend(d, "month")),
+        ("sales_by_category",     "Sales by Category",          lambda d: _sales_by_category(d, "category")),
+        ("sales_by_subcategory",  "Sales by Sub-Category",      _sales_by_subcategory),
+        ("sales_by_market_region","Sales by Market & Region",   _sales_by_market_region),
+        ("segment_breakdown",     "Sales by Customer Segment",  _segment_breakdown),
+        ("top_products",          "Top 10 Products by Profit",  _top_products),
+        ("discount_vs_profit",    "Discount vs Profit",         _discount_vs_profit),
+        ("ship_mode_priority",    "Ship Mode & Order Priority", _ship_mode_priority),
     ]
 
     charts = []
@@ -26,15 +38,30 @@ def build_all_charts(df: pd.DataFrame) -> List[ChartData]:
         try:
             fig = builder(df)
             _apply_base_layout(fig)
-            charts.append(ChartData(
-                chart_id=chart_id,
-                title=title,
-                figure_json=fig.to_json(),
-            ))
+            charts.append(ChartData(chart_id=chart_id, title=title, figure_json=fig.to_json()))
         except Exception as e:
             print(f"[chart_builder] {chart_id} failed: {e}")
-
     return charts
+
+
+def build_single_chart(df: pd.DataFrame, chart_id: str, options: Dict[str, Any]) -> ChartData:
+    """Rebuild one specific chart with visual-level options (granularity, view toggle)."""
+    if chart_id == "sales_profit_trend":
+        granularity = options.get("granularity", "month")
+        gran_label = {"week": "by Week", "month": "by Month", "quarter": "by Quarter"}[granularity]
+        title = f"Sales & Profit {gran_label}"
+        fig = _sales_profit_trend(df, granularity)
+
+    elif chart_id == "sales_by_category":
+        view = options.get("view", "category")
+        title = "Sales by Sub-Category" if view == "sub_category" else "Sales by Category"
+        fig = _sales_by_category(df, view)
+
+    else:
+        raise ValueError(f"Chart '{chart_id}' does not support per-chart options.")
+
+    _apply_base_layout(fig)
+    return ChartData(chart_id=chart_id, title=title, figure_json=fig.to_json())
 
 
 def _apply_base_layout(fig: go.Figure) -> None:
@@ -54,41 +81,46 @@ def _apply_base_layout(fig: go.Figure) -> None:
     )
 
 
-# ── Chart 1: Sales & Profit Trend ─────────────────────────────────────────────
-def _sales_profit_trend(df: pd.DataFrame) -> go.Figure:
+# ── Chart 1: Sales & Profit Trend (with granularity) ──────────────────────────
+def _sales_profit_trend(df: pd.DataFrame, granularity: str = "month") -> go.Figure:
     df = df.copy()
-    df["Month"] = df["Order Date"].dt.to_period("M").dt.to_timestamp()
-    monthly = (
-        df.groupby("Month")
+    freq = FREQ_MAP.get(granularity, "M")
+    df["Period"] = df["Order Date"].dt.to_period(freq).dt.to_timestamp()
+
+    grouped = (
+        df.groupby("Period")
         .agg(Sales=("Sales", "sum"), Profit=("Profit", "sum"))
         .reset_index()
+        .sort_values("Period")
     )
+    grouped["Label"] = grouped["Period"].apply(lambda ts: _period_label(ts, granularity))
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=monthly["Month"], y=monthly["Sales"],
+        x=grouped["Label"], y=grouped["Sales"],
         name="Sales", mode="lines+markers",
         line=dict(color=BLUE, width=2),
         fill="tozeroy", fillcolor="rgba(79,129,189,0.08)",
-        hovertemplate="<b>%{x|%b %Y}</b><br>Sales: $%{y:,.0f}<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>Sales: $%{y:,.0f}<extra></extra>",
     ))
     fig.add_trace(go.Scatter(
-        x=monthly["Month"], y=monthly["Profit"],
+        x=grouped["Label"], y=grouped["Profit"],
         name="Profit", mode="lines+markers",
         line=dict(color=ORANGE, width=2),
         fill="tozeroy", fillcolor="rgba(247,150,70,0.08)",
-        hovertemplate="<b>%{x|%b %Y}</b><br>Profit: $%{y:,.0f}<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>Profit: $%{y:,.0f}<extra></extra>",
     ))
     fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)")
     fig.update_yaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)", tickprefix="$")
     return fig
 
 
-# ── Chart 2: Sales by Category ────────────────────────────────────────────────
-def _sales_by_category(df: pd.DataFrame) -> go.Figure:
-    cat_data = df.groupby("Category")["Sales"].sum().reset_index()
+# ── Chart 2: Sales by Category / Sub-Category (toggle) ────────────────────────
+def _sales_by_category(df: pd.DataFrame, view: str = "category") -> go.Figure:
+    col = "Sub-Category" if view == "sub_category" else "Category"
+    data = df.groupby(col)["Sales"].sum().reset_index()
     fig = px.pie(
-        cat_data, values="Sales", names="Category",
+        data, values="Sales", names=col,
         hole=0.48, color_discrete_sequence=COLORS,
     )
     fig.update_traces(

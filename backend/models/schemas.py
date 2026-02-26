@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 
 class FilterParams(BaseModel):
@@ -15,12 +15,17 @@ class FilterParams(BaseModel):
     order_priority: Optional[List[str]] = None
 
 
+class ChartRequest(FilterParams):
+    chart_id: str
+    options: Optional[Dict[str, Any]] = {}
+
+
 class KPIData(BaseModel):
     total_sales: float
     total_profit: float
     profit_margin: float
     total_orders: int
-    total_quantity: int
+    repeat_customer_rate: float
     avg_order_value: float
     total_shipping_cost: float
     avg_discount: float

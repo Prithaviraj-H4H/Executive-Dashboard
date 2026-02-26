@@ -1,94 +1,65 @@
-import { useMemo } from 'react'
-import Select from 'react-select'
-import { RotateCcw, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { RotateCcw, X, Calendar, SlidersHorizontal } from 'lucide-react'
+import { subDays, subMonths, startOfYear, format, parseISO } from 'date-fns'
 import { useDashboard } from '../context/DashboardContext'
-import { useTheme } from '../context/ThemeContext'
+import FilterDropdown from './FilterDropdown'
 
-function useSelectStyles(isDark) {
-  return useMemo(
-    () => ({
-      control: (base, state) => ({
-        ...base,
-        backgroundColor: isDark ? '#1E2130' : '#F8FAFC',
-        borderColor: state.isFocused
-          ? '#4F81BD'
-          : isDark
-          ? '#2D3142'
-          : '#E2E8F0',
-        boxShadow: state.isFocused ? '0 0 0 1px #4F81BD' : 'none',
-        minHeight: '36px',
-        fontSize: '13px',
-        '&:hover': { borderColor: '#4F81BD' },
-      }),
-      menu: (base) => ({
-        ...base,
-        backgroundColor: isDark ? '#1A1D27' : '#FFFFFF',
-        border: `1px solid ${isDark ? '#2D3142' : '#E2E8F0'}`,
-        boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
-        zIndex: 100,
-      }),
-      option: (base, state) => ({
-        ...base,
-        backgroundColor: state.isSelected
-          ? '#4F81BD'
-          : state.isFocused
-          ? isDark ? '#2D3142' : '#F1F5F9'
-          : 'transparent',
-        color: state.isSelected ? '#fff' : isDark ? '#CBD5E1' : '#374151',
-        fontSize: '13px',
-        padding: '6px 12px',
-      }),
-      multiValue: (base) => ({
-        ...base,
-        backgroundColor: isDark ? '#2D3142' : '#EFF6FF',
-      }),
-      multiValueLabel: (base) => ({
-        ...base,
-        color: isDark ? '#CBD5E1' : '#1D4ED8',
-        fontSize: '12px',
-      }),
-      multiValueRemove: (base) => ({
-        ...base,
-        color: isDark ? '#94A3B8' : '#3B82F6',
-        '&:hover': { backgroundColor: '#4F81BD', color: '#fff' },
-      }),
-      input: (base) => ({ ...base, color: isDark ? '#F1F5F9' : '#1E293B' }),
-      placeholder: (base) => ({ ...base, color: isDark ? '#475569' : '#94A3B8', fontSize: '13px' }),
-      singleValue: (base) => ({ ...base, color: isDark ? '#F1F5F9' : '#1E293B' }),
-      clearIndicator: (base) => ({ ...base, color: isDark ? '#475569' : '#94A3B8', padding: '2px' }),
-      dropdownIndicator: (base) => ({ ...base, color: isDark ? '#475569' : '#94A3B8', padding: '2px' }),
-    }),
-    [isDark]
-  )
-}
+const DATE_PRESETS = [
+  { key: 'all',    label: 'All'    },
+  { key: '7D',     label: '7D'     },
+  { key: '30D',    label: '30D'    },
+  { key: '3M',     label: '3M'     },
+  { key: '6M',     label: '6M'     },
+  { key: 'YTD',    label: 'YTD'    },
+  { key: '1Y',     label: '1Y'     },
+  { key: 'custom', label: 'Custom' },
+]
 
-function toOptions(arr) {
-  return (arr || []).map((v) => ({ value: v, label: v }))
-}
-
-function FilterGroup({ label, children }) {
-  return (
-    <div className="space-y-1.5">
-      <p className="label">{label}</p>
-      {children}
-    </div>
-  )
+function getPresetRange(key, maxDateStr) {
+  const maxDate = parseISO(maxDateStr)
+  switch (key) {
+    case '7D':  return { start: subDays(maxDate, 6),    end: maxDate }
+    case '30D': return { start: subDays(maxDate, 29),   end: maxDate }
+    case '3M':  return { start: subMonths(maxDate, 3),  end: maxDate }
+    case '6M':  return { start: subMonths(maxDate, 6),  end: maxDate }
+    case 'YTD': return { start: startOfYear(maxDate),   end: maxDate }
+    case '1Y':  return { start: subMonths(maxDate, 12), end: maxDate }
+    default:    return null
+  }
 }
 
 export default function FilterPanel({ onClose }) {
   const { filterOptions, activeFilters, applyFilters, resetFilters } = useDashboard()
-  const { isDark } = useTheme()
-  const styles = useSelectStyles(isDark)
+  const [activePreset, setActivePreset] = useState('all')
 
   if (!filterOptions) return null
 
-  const set = (key, values) =>
-    applyFilters({ ...activeFilters, [key]: values.map((o) => o.value) })
+  const set = (key, values) => applyFilters({ ...activeFilters, [key]: values })
 
-  const setDate = (key, val) =>
+  const handlePreset = (presetKey) => {
+    setActivePreset(presetKey)
+    if (presetKey === 'all') {
+      applyFilters({ ...activeFilters, date_start: null, date_end: null })
+      return
+    }
+    if (presetKey === 'custom') return // just reveal the inputs
+
+    const range = getPresetRange(presetKey, filterOptions.date_range.max_date)
+    if (range) {
+      applyFilters({
+        ...activeFilters,
+        date_start: format(range.start, 'yyyy-MM-dd'),
+        date_end: format(range.end, 'yyyy-MM-dd'),
+      })
+    }
+  }
+
+  const handleCustomDate = (key, val) => {
+    setActivePreset('custom')
     applyFilters({ ...activeFilters, [key]: val || null })
+  }
 
-  // Available sub-categories based on selected categories
+  // Cascading: sub-categories follow selected categories
   const availableSubCats = useMemo(() => {
     const cats = activeFilters.category?.length
       ? activeFilters.category
@@ -96,7 +67,7 @@ export default function FilterPanel({ onClose }) {
     return cats.flatMap((c) => filterOptions.sub_categories[c] || [])
   }, [activeFilters.category, filterOptions])
 
-  // Available regions based on selected markets
+  // Cascading: regions follow selected markets
   const availableRegions = useMemo(() => {
     const mkts = activeFilters.market?.length
       ? activeFilters.market
@@ -110,17 +81,17 @@ export default function FilterPanel({ onClose }) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* ── Panel header ─────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-dark-border">
         <span className="font-semibold text-sm text-slate-700 dark:text-slate-200">Filters</span>
         <div className="flex items-center gap-2">
           {hasActive && (
             <button
-              onClick={resetFilters}
+              onClick={() => { resetFilters(); setActivePreset('all') }}
               className="flex items-center gap-1 text-xs text-brand-blue hover:underline"
             >
               <RotateCcw size={12} />
-              Reset
+              Reset all
             </button>
           )}
           <button
@@ -132,123 +103,121 @@ export default function FilterPanel({ onClose }) {
         </div>
       </div>
 
-      {/* Filter controls */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-        {/* Date Range */}
-        <FilterGroup label="Date Range">
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <p className="text-xs text-slate-400 dark:text-dark-muted mb-1">From</p>
-              <input
-                type="date"
-                min={filterOptions.date_range.min_date}
-                max={filterOptions.date_range.max_date}
-                value={activeFilters.date_start || ''}
-                onChange={(e) => setDate('date_start', e.target.value)}
-                className="w-full text-xs rounded-md border border-slate-200 dark:border-dark-border
-                  bg-slate-50 dark:bg-dark-card text-slate-700 dark:text-slate-200
-                  px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-blue"
-              />
-            </div>
-            <div className="flex-1">
-              <p className="text-xs text-slate-400 dark:text-dark-muted mb-1">To</p>
-              <input
-                type="date"
-                min={filterOptions.date_range.min_date}
-                max={filterOptions.date_range.max_date}
-                value={activeFilters.date_end || ''}
-                onChange={(e) => setDate('date_end', e.target.value)}
-                className="w-full text-xs rounded-md border border-slate-200 dark:border-dark-border
-                  bg-slate-50 dark:bg-dark-card text-slate-700 dark:text-slate-200
-                  px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-blue"
-              />
-            </div>
+      <div className="flex-1 overflow-y-auto">
+
+        {/* ── DATE RANGE ───────────────────────────────── */}
+        <div className="px-4 pt-4 pb-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Calendar size={13} className="text-brand-blue" />
+            <p className="label">Date Range</p>
           </div>
-        </FilterGroup>
 
-        {/* Category */}
-        <FilterGroup label="Category">
-          <Select
-            isMulti
-            options={toOptions(filterOptions.categories)}
-            value={toOptions(activeFilters.category)}
-            onChange={(v) => set('category', v)}
-            styles={styles}
-            placeholder="All categories"
-          />
-        </FilterGroup>
+          {/* Quick preset pills */}
+          <div className="flex flex-wrap gap-1.5">
+            {DATE_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => handlePreset(p.key)}
+                className={`
+                  px-2.5 py-1 text-xs font-medium rounded-md border transition-colors
+                  ${activePreset === p.key
+                    ? 'bg-brand-blue text-white border-brand-blue'
+                    : 'border-slate-200 dark:border-dark-border text-slate-600 dark:text-slate-300 hover:border-brand-blue hover:text-brand-blue bg-white dark:bg-dark-card'
+                  }
+                `}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
 
-        {/* Sub-Category */}
-        <FilterGroup label="Sub-Category">
-          <Select
-            isMulti
-            options={toOptions(availableSubCats)}
-            value={toOptions(activeFilters.sub_category)}
-            onChange={(v) => set('sub_category', v)}
-            styles={styles}
-            placeholder="All sub-categories"
-          />
-        </FilterGroup>
+          {/* Custom date inputs — visible only when Custom preset is active */}
+          {activePreset === 'custom' && (
+            <div className="flex gap-2 mt-3">
+              <div className="flex-1">
+                <p className="text-xs text-slate-400 dark:text-dark-muted mb-1">From</p>
+                <input
+                  type="date"
+                  min={filterOptions.date_range.min_date}
+                  max={filterOptions.date_range.max_date}
+                  value={activeFilters.date_start || ''}
+                  onChange={(e) => handleCustomDate('date_start', e.target.value)}
+                  className="w-full text-xs rounded-md border border-slate-200 dark:border-dark-border
+                    bg-slate-50 dark:bg-dark-card text-slate-700 dark:text-slate-200
+                    px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-slate-400 dark:text-dark-muted mb-1">To</p>
+                <input
+                  type="date"
+                  min={filterOptions.date_range.min_date}
+                  max={filterOptions.date_range.max_date}
+                  value={activeFilters.date_end || ''}
+                  onChange={(e) => handleCustomDate('date_end', e.target.value)}
+                  className="w-full text-xs rounded-md border border-slate-200 dark:border-dark-border
+                    bg-slate-50 dark:bg-dark-card text-slate-700 dark:text-slate-200
+                    px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                />
+              </div>
+            </div>
+          )}
+        </div>
 
-        {/* Market */}
-        <FilterGroup label="Market">
-          <Select
-            isMulti
-            options={toOptions(filterOptions.markets)}
-            value={toOptions(activeFilters.market)}
-            onChange={(v) => set('market', v)}
-            styles={styles}
-            placeholder="All markets"
-          />
-        </FilterGroup>
+        {/* ── DIVIDER ──────────────────────────────────── */}
+        <div className="mx-4 border-t border-slate-200 dark:border-dark-border" />
 
-        {/* Region */}
-        <FilterGroup label="Region">
-          <Select
-            isMulti
-            options={toOptions(availableRegions)}
-            value={toOptions(activeFilters.region)}
-            onChange={(v) => set('region', v)}
-            styles={styles}
-            placeholder="All regions"
-          />
-        </FilterGroup>
+        {/* ── DIMENSION FILTERS ────────────────────────── */}
+        <div className="px-4 pt-4 pb-6 space-y-2.5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <SlidersHorizontal size={13} className="text-brand-blue" />
+            <p className="label">Dimensions</p>
+          </div>
 
-        {/* Segment */}
-        <FilterGroup label="Customer Segment">
-          <Select
-            isMulti
-            options={toOptions(filterOptions.segments)}
-            value={toOptions(activeFilters.segment)}
-            onChange={(v) => set('segment', v)}
-            styles={styles}
-            placeholder="All segments"
+          <FilterDropdown
+            label="Category"
+            options={filterOptions.categories}
+            selected={activeFilters.category || []}
+            onChange={(values) => set('category', values)}
           />
-        </FilterGroup>
+          <FilterDropdown
+            label="Sub-Category"
+            options={availableSubCats}
+            selected={activeFilters.sub_category || []}
+            onChange={(values) => set('sub_category', values)}
+          />
+          <FilterDropdown
+            label="Market"
+            options={filterOptions.markets}
+            selected={activeFilters.market || []}
+            onChange={(values) => set('market', values)}
+          />
+          <FilterDropdown
+            label="Region"
+            options={availableRegions}
+            selected={activeFilters.region || []}
+            onChange={(values) => set('region', values)}
+          />
+          <FilterDropdown
+            label="Segment"
+            options={filterOptions.segments}
+            selected={activeFilters.segment || []}
+            onChange={(values) => set('segment', values)}
+          />
+          <FilterDropdown
+            label="Ship Mode"
+            options={filterOptions.ship_modes}
+            selected={activeFilters.ship_mode || []}
+            onChange={(values) => set('ship_mode', values)}
+          />
+          <FilterDropdown
+            label="Priority"
+            options={filterOptions.order_priorities}
+            selected={activeFilters.order_priority || []}
+            onChange={(values) => set('order_priority', values)}
+          />
+        </div>
 
-        {/* Ship Mode */}
-        <FilterGroup label="Ship Mode">
-          <Select
-            isMulti
-            options={toOptions(filterOptions.ship_modes)}
-            value={toOptions(activeFilters.ship_mode)}
-            onChange={(v) => set('ship_mode', v)}
-            styles={styles}
-            placeholder="All ship modes"
-          />
-        </FilterGroup>
-
-        {/* Order Priority */}
-        <FilterGroup label="Order Priority">
-          <Select
-            isMulti
-            options={toOptions(filterOptions.order_priorities)}
-            value={toOptions(activeFilters.order_priority)}
-            onChange={(v) => set('order_priority', v)}
-            styles={styles}
-            placeholder="All priorities"
-          />
-        </FilterGroup>
       </div>
     </div>
   )

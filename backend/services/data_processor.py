@@ -62,17 +62,24 @@ def compute_kpis(df: pd.DataFrame) -> KPIData:
     total_profit = round(float(df["Profit"].sum()), 2)
     profit_margin = round((total_profit / total_sales * 100) if total_sales > 0 else 0.0, 2)
     total_orders = int(df["Order ID"].nunique())
-    total_quantity = int(df["Quantity"].sum())
     avg_order_value = round(total_sales / total_orders if total_orders > 0 else 0.0, 2)
     total_shipping_cost = round(float(df["Shipping Cost"].sum()), 2)
     avg_discount = round(float(df["Discount"].mean()) * 100, 2)
+
+    # Repeat Customer Rate: % of customers who placed more than one unique order
+    customer_order_counts = df.groupby("Customer ID")["Order ID"].nunique()
+    total_customers = len(customer_order_counts)
+    repeat_customers = int((customer_order_counts > 1).sum())
+    repeat_customer_rate = round(
+        (repeat_customers / total_customers * 100) if total_customers > 0 else 0.0, 2
+    )
 
     return KPIData(
         total_sales=total_sales,
         total_profit=total_profit,
         profit_margin=profit_margin,
         total_orders=total_orders,
-        total_quantity=total_quantity,
+        repeat_customer_rate=repeat_customer_rate,
         avg_order_value=avg_order_value,
         total_shipping_cost=total_shipping_cost,
         avg_discount=avg_discount,

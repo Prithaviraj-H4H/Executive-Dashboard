@@ -29,6 +29,16 @@ export async function fetchDashboard(sessionId, filters) {
   return data
 }
 
+export async function fetchChart(sessionId, filters, chartId, options = {}) {
+  const { data } = await client.post('/api/chart', {
+    session_id: sessionId,
+    ...filters,
+    chart_id: chartId,
+    options,
+  })
+  return data
+}
+
 export function getExportUrl(sessionId) {
   return `${BASE_URL}/api/export/${sessionId}`
 }

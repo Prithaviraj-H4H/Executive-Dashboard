@@ -1,48 +1,117 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { SlidersHorizontal, X } from 'lucide-react'
+import toast from 'react-hot-toast'
 import Navbar from '../components/Navbar'
 import KPICard from '../components/KPICard'
 import ChartCard from '../components/ChartCard'
 import FilterPanel from '../components/FilterPanel'
 import { useDashboard } from '../context/DashboardContext'
+import { fetchChart } from '../services/api'
 
 // Maps chart_id → which filter key a click on that chart updates
 const CHART_FILTER_MAP = {
-  sales_by_category: 'category',
-  sales_by_subcategory: 'sub_category',
-  sales_by_market_region: 'market',
-  segment_breakdown: 'segment',
-  ship_mode_priority: 'ship_mode',
+  sales_by_category:     'category',
+  sales_by_subcategory:  'sub_category',
+  sales_by_market_region:'market',
+  segment_breakdown:     'segment',
+  ship_mode_priority:    'ship_mode',
 }
 
 const KPI_CONFIGS = [
-  { key: 'total_sales', label: 'Total Sales', prefix: '$', color: 'blue' },
-  { key: 'total_profit', label: 'Total Profit', prefix: '$', color: 'green' },
-  { key: 'profit_margin', label: 'Profit Margin', suffix: '%', color: 'purple' },
-  { key: 'total_orders', label: 'Total Orders', color: 'orange' },
-  { key: 'total_quantity', label: 'Units Sold', color: 'teal' },
-  { key: 'avg_order_value', label: 'Avg Order Value', prefix: '$', color: 'indigo' },
-  { key: 'total_shipping_cost', label: 'Shipping Cost', prefix: '$', color: 'rose' },
-  { key: 'avg_discount', label: 'Avg Discount', suffix: '%', color: 'amber' },
+  { key: 'total_sales',          label: 'Total Sales',       prefix: '$', color: 'blue'   },
+  { key: 'total_profit',         label: 'Total Profit',      prefix: '$', color: 'green'  },
+  { key: 'profit_margin',        label: 'Profit Margin',     suffix: '%', color: 'purple' },
+  { key: 'total_orders',         label: 'Total Orders',                   color: 'orange' },
+  { key: 'repeat_customer_rate', label: 'Repeat Customers',  suffix: '%', color: 'teal'   },
+  { key: 'avg_order_value',      label: 'Avg Order Value',   prefix: '$', color: 'indigo' },
+  { key: 'total_shipping_cost',  label: 'Shipping Cost',     prefix: '$', color: 'rose'   },
+  { key: 'avg_discount',         label: 'Avg Discount',      suffix: '%', color: 'amber'  },
 ]
 
-// Chart layout: some charts span 2 columns for better visual hierarchy
+// Some charts span 2 columns for visual hierarchy
 const CHART_SPANS = {
-  sales_profit_trend: 'col-span-1 md:col-span-2',
+  sales_profit_trend:   'col-span-1 md:col-span-2',
   sales_by_subcategory: 'col-span-1 md:col-span-2',
-  ship_mode_priority: 'col-span-1 md:col-span-2',
+  ship_mode_priority:   'col-span-1 md:col-span-2',
 }
 
+// Visual-level toggle configurations per chart
+const CHART_TOGGLE_CONFIGS = {
+  sales_profit_trend: {
+    key: 'granularity',
+    defaultValue: 'month',
+    options: [
+      { value: 'week',    label: 'Week'    },
+      { value: 'month',   label: 'Month'   },
+      { value: 'quarter', label: 'Quarter' },
+    ],
+  },
+  sales_by_category: {
+    key: 'view',
+    defaultValue: 'category',
+    options: [
+      { value: 'category',     label: 'Category'     },
+      { value: 'sub_category', label: 'Sub-Category' },
+    ],
+  },
+}
+
+// Initial chart options (all at their defaults)
+const INITIAL_CHART_OPTIONS = Object.fromEntries(
+  Object.entries(CHART_TOGGLE_CONFIGS).map(([chartId, cfg]) => [
+    chartId,
+    { [cfg.key]: cfg.defaultValue },
+  ])
+)
+
 export default function DashboardPage() {
-  const { kpis, charts, isLoading } = useDashboard()
+  const { sessionId, kpis, charts, activeFilters, isLoading } = useDashboard()
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [chartOptions, setChartOptions]   = useState(INITIAL_CHART_OPTIONS)
+  const [chartOverrides, setChartOverrides] = useState({})  // { chart_id: ChartData }
+  const [chartLoading, setChartLoading]   = useState({})    // { chart_id: bool }
+
+  // When global filters change (charts prop updates), re-apply non-default chart options
+  useEffect(() => {
+    if (!sessionId || !charts.length) return
+
+    const nonDefault = Object.entries(chartOptions).filter(([chartId, opts]) => {
+      const cfg = CHART_TOGGLE_CONFIGS[chartId]
+      return cfg && opts[cfg.key] !== cfg.defaultValue
+    })
+
+    nonDefault.forEach(([chartId, opts]) => {
+      fetchChart(sessionId, activeFilters, chartId, opts)
+        .then((result) => setChartOverrides((prev) => ({ ...prev, [chartId]: result })))
+        .catch(console.error)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [charts])
+
+  // Called when a chart-level toggle is clicked
+  const handleOptionChange = useCallback(
+    async (chartId, optionKey, optionValue) => {
+      const newOptions = { ...chartOptions[chartId], [optionKey]: optionValue }
+      setChartOptions((prev) => ({ ...prev, [chartId]: newOptions }))
+      setChartLoading((prev) => ({ ...prev, [chartId]: true }))
+      try {
+        const result = await fetchChart(sessionId, activeFilters, chartId, newOptions)
+        setChartOverrides((prev) => ({ ...prev, [chartId]: result }))
+      } catch {
+        toast.error('Failed to update chart.')
+      } finally {
+        setChartLoading((prev) => ({ ...prev, [chartId]: false }))
+      }
+    },
+    [sessionId, activeFilters, chartOptions]
+  )
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 dark:bg-dark-bg transition-colors">
       <Navbar />
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar toggle button (mobile) */}
+        {/* Mobile sidebar toggle */}
         <button
           onClick={() => setSidebarOpen((o) => !o)}
           className="fixed bottom-6 right-6 z-50 md:hidden btn-primary p-3 rounded-full shadow-lg"
@@ -55,8 +124,7 @@ export default function DashboardPage() {
         <aside
           className={`
             fixed md:sticky top-0 md:top-16 h-screen md:h-[calc(100vh-4rem)]
-            w-72 shrink-0 z-40 overflow-y-auto
-            transition-transform duration-300
+            w-72 shrink-0 z-40 overflow-y-auto transition-transform duration-300
             bg-white dark:bg-dark-surface border-r border-slate-200 dark:border-dark-border
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
           `}
@@ -88,15 +156,27 @@ export default function DashboardPage() {
           <section>
             <h2 className="label mb-3">Analytics</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-              {charts.map((chart) => (
-                <ChartCard
-                  key={chart.chart_id}
-                  chart={chart}
-                  filterKey={CHART_FILTER_MAP[chart.chart_id] || null}
-                  className={CHART_SPANS[chart.chart_id] || ''}
-                  isLoading={isLoading}
-                />
-              ))}
+              {charts.map((chart) => {
+                const toggleCfg    = CHART_TOGGLE_CONFIGS[chart.chart_id] || null
+                const curOption    = toggleCfg
+                  ? (chartOptions[chart.chart_id]?.[toggleCfg.key] ?? toggleCfg.defaultValue)
+                  : null
+                const overrideData = chartOverrides[chart.chart_id] || null
+
+                return (
+                  <ChartCard
+                    key={chart.chart_id}
+                    chart={chart}
+                    overrideChart={overrideData}
+                    filterKey={CHART_FILTER_MAP[chart.chart_id] || null}
+                    className={CHART_SPANS[chart.chart_id] || ''}
+                    isLoading={isLoading || !!chartLoading[chart.chart_id]}
+                    toggleConfig={toggleCfg}
+                    currentOption={curOption}
+                    onOptionChange={(key, value) => handleOptionChange(chart.chart_id, key, value)}
+                  />
+                )
+              })}
             </div>
           </section>
         </main>
