@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { SlidersHorizontal, X } from 'lucide-react'
+import { SlidersHorizontal, X, DollarSign, TrendingUp, Percent, ShoppingBag, Users, ShoppingCart, Truck, Tag } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Navbar from '../components/Navbar'
 import KPICard from '../components/KPICard'
@@ -18,14 +18,14 @@ const CHART_FILTER_MAP = {
 }
 
 const KPI_CONFIGS = [
-  { key: 'total_sales',          label: 'Total Sales',       prefix: '$', color: 'blue'   },
-  { key: 'total_profit',         label: 'Total Profit',      prefix: '$', color: 'green'  },
-  { key: 'profit_margin',        label: 'Profit Margin',     suffix: '%', color: 'purple' },
-  { key: 'total_orders',         label: 'Total Orders',                   color: 'orange' },
-  { key: 'repeat_customer_rate', label: 'Repeat Customers',  suffix: '%', color: 'teal'   },
-  { key: 'avg_order_value',      label: 'Avg Order Value',   prefix: '$', color: 'indigo' },
-  { key: 'total_shipping_cost',  label: 'Shipping Cost',     prefix: '$', color: 'rose'   },
-  { key: 'avg_discount',         label: 'Avg Discount',      suffix: '%', color: 'amber'  },
+  { key: 'total_sales',          label: 'Total Sales',       prefix: '$', color: 'blue',   icon: DollarSign   },
+  { key: 'total_profit',         label: 'Total Profit',      prefix: '$', color: 'green',  icon: TrendingUp   },
+  { key: 'profit_margin',        label: 'Profit Margin',     suffix: '%', color: 'purple', icon: Percent      },
+  { key: 'total_orders',         label: 'Total Orders',                   color: 'orange', icon: ShoppingBag  },
+  { key: 'repeat_customer_rate', label: 'Repeat Customers',  suffix: '%', color: 'teal',   icon: Users        },
+  { key: 'avg_order_value',      label: 'Avg Order Value',   prefix: '$', color: 'indigo', icon: ShoppingCart },
+  { key: 'total_shipping_cost',  label: 'Shipping Cost',     prefix: '$', color: 'rose',   icon: Truck        },
+  { key: 'avg_discount',         label: 'Avg Discount',      suffix: '%', color: 'amber',  icon: Tag          },
 ]
 
 // Some charts span 2 columns for visual hierarchy
@@ -136,7 +136,8 @@ export default function DashboardPage() {
         <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
           {/* KPI Cards */}
           <section>
-            <h2 className="label mb-3">Key Performance Indicators</h2>
+            <h2 className="text-base font-semibold text-slate-800 dark:text-white mb-0.5">Key Performance Indicators</h2>
+            <p className="text-xs text-slate-500 dark:text-dark-muted mb-3">Core business metrics for the selected period</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
               {KPI_CONFIGS.map((cfg) => (
                 <KPICard
@@ -146,6 +147,7 @@ export default function DashboardPage() {
                   prefix={cfg.prefix}
                   suffix={cfg.suffix}
                   color={cfg.color}
+                  icon={cfg.icon}
                   loading={isLoading && !kpis}
                 />
               ))}
@@ -154,7 +156,8 @@ export default function DashboardPage() {
 
           {/* Charts Grid */}
           <section>
-            <h2 className="label mb-3">Analytics</h2>
+            <h2 className="text-base font-semibold text-slate-800 dark:text-white mb-0.5">Analytics</h2>
+            <p className="text-xs text-slate-500 dark:text-dark-muted mb-3">Interactive charts — click any segment to filter the dashboard</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
               {charts.map((chart) => {
                 const toggleCfg    = CHART_TOGGLE_CONFIGS[chart.chart_id] || null

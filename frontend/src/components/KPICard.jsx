@@ -1,12 +1,12 @@
 const COLOR_MAP = {
-  blue:   { bg: 'bg-blue-50 dark:bg-blue-900/20',   icon: 'text-blue-500',   border: 'border-blue-100 dark:border-blue-800/40' },
-  green:  { bg: 'bg-green-50 dark:bg-green-900/20', icon: 'text-green-500',  border: 'border-green-100 dark:border-green-800/40' },
-  purple: { bg: 'bg-purple-50 dark:bg-purple-900/20',icon:'text-purple-500', border: 'border-purple-100 dark:border-purple-800/40' },
-  orange: { bg: 'bg-orange-50 dark:bg-orange-900/20',icon:'text-orange-500', border: 'border-orange-100 dark:border-orange-800/40' },
-  teal:   { bg: 'bg-teal-50 dark:bg-teal-900/20',   icon: 'text-teal-500',   border: 'border-teal-100 dark:border-teal-800/40' },
-  indigo: { bg: 'bg-indigo-50 dark:bg-indigo-900/20',icon:'text-indigo-500', border: 'border-indigo-100 dark:border-indigo-800/40' },
-  rose:   { bg: 'bg-rose-50 dark:bg-rose-900/20',   icon: 'text-rose-500',   border: 'border-rose-100 dark:border-rose-800/40' },
-  amber:  { bg: 'bg-amber-50 dark:bg-amber-900/20', icon: 'text-amber-500',  border: 'border-amber-100 dark:border-amber-800/40' },
+  blue:   { bg: 'bg-blue-500/20',   icon: 'text-blue-400',   value: 'text-blue-400'   },
+  green:  { bg: 'bg-green-500/20',  icon: 'text-green-400',  value: 'text-green-400'  },
+  purple: { bg: 'bg-purple-500/20', icon: 'text-purple-400', value: 'text-purple-400' },
+  orange: { bg: 'bg-orange-500/20', icon: 'text-orange-400', value: 'text-orange-400' },
+  teal:   { bg: 'bg-teal-500/20',   icon: 'text-teal-400',   value: 'text-teal-400'   },
+  indigo: { bg: 'bg-indigo-500/20', icon: 'text-indigo-400', value: 'text-indigo-400' },
+  rose:   { bg: 'bg-rose-500/20',   icon: 'text-rose-400',   value: 'text-rose-400'   },
+  amber:  { bg: 'bg-amber-500/20',  icon: 'text-amber-400',  value: 'text-amber-400'  },
 }
 
 function formatValue(value, prefix, suffix) {
@@ -21,18 +21,27 @@ function formatValue(value, prefix, suffix) {
   return num.toLocaleString()
 }
 
-export default function KPICard({ label, value, prefix, suffix, color = 'blue', loading }) {
+export default function KPICard({ label, value, prefix, suffix, color = 'blue', loading, icon: Icon }) {
   const palette = COLOR_MAP[color] || COLOR_MAP.blue
 
   return (
-    <div className={`card p-4 border ${palette.border} transition-all`}>
-      <p className="label mb-2">{label}</p>
-      {loading || value === undefined ? (
-        <div className="h-7 w-28 rounded bg-slate-200 dark:bg-dark-border animate-pulse" />
-      ) : (
-        <p className={`text-2xl font-bold ${palette.icon}`}>
-          {formatValue(value, prefix, suffix)}
+    <div className="card p-4 flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-dark-muted mb-1.5">
+          {label}
         </p>
+        {loading || value === undefined ? (
+          <div className="h-7 w-28 rounded bg-slate-200 dark:bg-dark-border animate-pulse" />
+        ) : (
+          <p className={`text-2xl font-bold ${palette.value}`}>
+            {formatValue(value, prefix, suffix)}
+          </p>
+        )}
+      </div>
+      {Icon && (
+        <div className={`shrink-0 p-3 rounded-xl ${palette.bg}`}>
+          <Icon size={22} className={palette.icon} />
+        </div>
       )}
     </div>
   )
