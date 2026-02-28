@@ -10,6 +10,18 @@ ORANGE = "#F79646"
 
 FREQ_MAP = {"week": "W", "month": "M", "quarter": "Q"}
 
+DIMENSION_COL = {
+    "category": "Category",
+    "segment":  "Segment",
+    "market":   "Market",
+}
+
+DIMENSION_LABELS = {
+    "category": "Category",
+    "segment":  "Customer Segment",
+    "market":   "Market",
+}
+
 
 def _period_label(ts: pd.Timestamp, granularity: str) -> str:
     if granularity == "week":
@@ -23,13 +35,11 @@ def _period_label(ts: pd.Timestamp, granularity: str) -> str:
 
 def build_all_charts(df: pd.DataFrame) -> List[ChartData]:
     builders = [
-        ("sales_profit_trend",    "Sales & Profit by Month",    lambda d: _sales_profit_trend(d, "month")),
-        ("sales_by_category",     "Sales by Category",          lambda d: _sales_by_category(d, "category")),
-        ("segment_breakdown",     "Sales by Customer Segment",  _segment_breakdown),
-        ("sales_by_market_region","Sales by Market & Region",   _sales_by_market_region),
-        ("top_products",          "Top 10 Products by Profit",  _top_products),
-        ("discount_vs_profit",    "Discount vs Profit",         _discount_vs_profit),
-        ("ship_mode_priority",    "Ship Mode & Order Priority", _ship_mode_priority),
+        ("sales_profit_trend", "Sales & Profit by Month",   lambda d: _sales_profit_trend(d, "month")),
+        ("dimension_explorer", "Sales by Category",         lambda d: _dimension_explorer(d, "category", "donut", "Sales")),
+        ("top_products",       "Top 10 Products by Profit", _top_products),
+        ("discount_vs_profit", "Discount vs Profit",        _discount_vs_profit),
+        ("ship_mode_priority", "Ship Mode & Order Priority", _ship_mode_priority),
     ]
 
     charts = []
@@ -44,12 +54,19 @@ def build_all_charts(df: pd.DataFrame) -> List[ChartData]:
 
 
 def build_single_chart(df: pd.DataFrame, chart_id: str, options: Dict[str, Any]) -> ChartData:
-    """Rebuild one specific chart with visual-level options (granularity, view toggle)."""
+    """Rebuild one specific chart with visual-level options."""
     if chart_id == "sales_profit_trend":
         granularity = options.get("granularity", "month")
         gran_label = {"week": "by Week", "month": "by Month", "quarter": "by Quarter"}[granularity]
         title = f"Sales & Profit {gran_label}"
         fig = _sales_profit_trend(df, granularity)
+
+    elif chart_id == "dimension_explorer":
+        dimension  = options.get("dimension", "category")
+        chart_type = options.get("chart_type", "donut")
+        metric     = options.get("metric", "Sales")
+        title = f"{metric} by {DIMENSION_LABELS.get(dimension, dimension.title())}"
+        fig = _dimension_explorer(df, dimension, chart_type, metric)
 
     else:
         raise ValueError(f"Chart '{chart_id}' does not support per-chart options.")
@@ -109,78 +126,67 @@ def _sales_profit_trend(df: pd.DataFrame, granularity: str = "month") -> go.Figu
     return fig
 
 
-# ── Chart 2: Sales by Category / Sub-Category (toggle) ────────────────────────
-def _sales_by_category(df: pd.DataFrame, view: str = "category") -> go.Figure:
-    col = "Sub-Category" if view == "sub_category" else "Category"
-    data = df.groupby(col)["Sales"].sum().reset_index()
-    fig = px.pie(
-        data, values="Sales", names=col,
-        hole=0.48, color_discrete_sequence=COLORS,
-    )
-    fig.update_traces(
-        textposition="inside",
-        textinfo="percent+label",
-        hovertemplate="<b>%{label}</b><br>Sales: $%{value:,.0f}<br>Share: %{percent}<extra></extra>",
-    )
-    return fig
+# ── Chart 2: Dimension Explorer (Category / Segment / Market × Donut / Treemap / Bar × Sales / Profit) ──
+def _dimension_explorer(
+    df: pd.DataFrame,
+    dimension: str = "category",
+    chart_type: str = "donut",
+    metric: str = "Sales",
+) -> go.Figure:
+    col = DIMENSION_COL.get(dimension, "Category")
+    metric_col = metric  # "Sales" or "Profit"
+    prefix = "$"
 
-
-# ── Chart 3: Sales by Sub-Category ────────────────────────────────────────────
-def _sales_by_subcategory(df: pd.DataFrame) -> go.Figure:
-    sub = (
-        df.groupby("Sub-Category")["Sales"]
+    data = (
+        df.groupby(col)[metric_col]
         .sum()
         .reset_index()
-        .sort_values("Sales", ascending=True)
+        .rename(columns={metric_col: metric_col})
     )
-    fig = px.bar(
-        sub, x="Sales", y="Sub-Category", orientation="h",
-        color="Sales", color_continuous_scale="Blues",
-    )
-    fig.update_traces(
-        hovertemplate="<b>%{y}</b><br>Sales: $%{x:,.0f}<extra></extra>",
-    )
-    fig.update_layout(coloraxis_showscale=False)
-    fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)", tickprefix="$")
-    fig.update_yaxes(showgrid=False)
+
+    if chart_type == "donut":
+        # Filter out non-positive values for pie charts
+        plot_data = data[data[metric_col] > 0]
+        fig = px.pie(
+            plot_data, values=metric_col, names=col,
+            hole=0.48, color_discrete_sequence=COLORS,
+        )
+        fig.update_traces(
+            textposition="inside",
+            textinfo="percent+label",
+            hovertemplate=f"<b>%{{label}}</b><br>{metric}: ${'{'}%{{value}}:,.0f{'}'}<br>Share: %{{percent}}<extra></extra>",
+        )
+
+    elif chart_type == "treemap":
+        plot_data = data[data[metric_col] > 0]
+        fig = px.treemap(
+            plot_data, path=[col], values=metric_col,
+            color=col, color_discrete_sequence=COLORS,
+        )
+        fig.update_traces(
+            texttemplate="<b>%{label}</b><br>" + prefix + "%{value:,.0f}",
+            hovertemplate=f"<b>%{{label}}</b><br>{metric}: {prefix}%{{value:,.0f}}<extra></extra>",
+            marker=dict(pad=dict(t=24, l=4, r=4, b=4)),
+        )
+        fig.update_layout(margin=dict(l=8, r=8, t=8, b=8))
+
+    else:  # bar
+        plot_data = data.sort_values(metric_col, ascending=True)
+        fig = px.bar(
+            plot_data, x=metric_col, y=col, orientation="h",
+            color=col, color_discrete_sequence=COLORS,
+        )
+        fig.update_traces(
+            hovertemplate=f"<b>%{{y}}</b><br>{metric}: {prefix}%{{x:,.0f}}<extra></extra>",
+            showlegend=False,
+        )
+        fig.update_xaxes(showgrid=False, tickprefix=prefix)
+        fig.update_yaxes(showgrid=False)
+
     return fig
 
 
-# ── Chart 4: Sales by Market & Region ─────────────────────────────────────────
-def _sales_by_market_region(df: pd.DataFrame) -> go.Figure:
-    data = (
-        df.groupby(["Market", "Region"])
-        .agg(Sales=("Sales", "sum"), Profit=("Profit", "sum"))
-        .reset_index()
-    )
-    fig = px.bar(
-        data, x="Market", y="Sales", color="Region",
-        barmode="group", color_discrete_sequence=COLORS,
-        hover_data={"Profit": ":,.0f", "Sales": ":,.0f"},
-    )
-    fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(showgrid=False, tickprefix="$")
-    return fig
-
-
-# ── Chart 5: Sales by Customer Segment (Treemap) ──────────────────────────────
-def _segment_breakdown(df: pd.DataFrame) -> go.Figure:
-    seg = df.groupby("Segment").agg(Sales=("Sales", "sum"), Profit=("Profit", "sum")).reset_index()
-    fig = px.treemap(
-        seg, path=["Segment"], values="Sales",
-        color="Segment", color_discrete_sequence=COLORS,
-        custom_data=["Profit"],
-    )
-    fig.update_traces(
-        texttemplate="<b>%{label}</b><br>$%{value:,.0f}",
-        hovertemplate="<b>%{label}</b><br>Sales: $%{value:,.0f}<br>Profit: $%{customdata[0]:,.0f}<extra></extra>",
-        marker=dict(pad=dict(t=24, l=4, r=4, b=4)),
-    )
-    fig.update_layout(margin=dict(l=8, r=8, t=8, b=8))
-    return fig
-
-
-# ── Chart 6: Top 10 Products by Profit ────────────────────────────────────────
+# ── Chart 3: Top 10 Products by Profit ────────────────────────────────────────
 def _top_products(df: pd.DataFrame) -> go.Figure:
     prod = (
         df.groupby("Product Name")
@@ -204,7 +210,7 @@ def _top_products(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-# ── Chart 7: Discount vs Profit ────────────────────────────────────────────────
+# ── Chart 4: Discount vs Profit ────────────────────────────────────────────────
 def _discount_vs_profit(df: pd.DataFrame) -> go.Figure:
     order_data = (
         df.groupby(["Order ID", "Category"])
@@ -231,7 +237,7 @@ def _discount_vs_profit(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-# ── Chart 8: Ship Mode & Order Priority ───────────────────────────────────────
+# ── Chart 5: Ship Mode & Order Priority ───────────────────────────────────────
 def _ship_mode_priority(df: pd.DataFrame) -> go.Figure:
     data = (
         df.groupby(["Ship Mode", "Order Priority"])["Sales"]

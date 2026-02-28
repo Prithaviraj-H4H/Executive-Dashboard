@@ -44,11 +44,10 @@ export default function ChartCard({
   filterKey,
   className = '',
   isLoading,
-  // Visual-level toggle props
-  toggleConfig,   // { key, options: [{value, label}] } | null
-  currentOption,  // current toggle value (string) | null
-  onOptionChange, // (key, value) => void
-  overrideChart,  // ChartData from per-chart API | null
+  toggleConfigs,   // Array of { key, options: [{value, label}] } | null
+  currentOptions,  // Object { key: value } | {}
+  onOptionChange,  // (key, value) => void
+  overrideChart,   // ChartData from per-chart API | null
 }) {
   const { isDark } = useTheme()
   const { applyChartFilter } = useDashboard()
@@ -101,23 +100,26 @@ export default function ChartCard({
 
   return (
     <div className={`card flex flex-col overflow-hidden ${className}`}>
-      {/* Card header */}
-      <div className="flex items-start justify-between px-4 pt-3 pb-2 gap-2">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 leading-snug pt-0.5">
+      {/* Card header — stacks vertically on mobile, row on sm+ */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between px-4 pt-3 pb-2 gap-2">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 leading-snug pt-0.5 shrink-0">
           {activeChart.title}
         </h3>
 
-        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-          {/* Visual-level toggle (Week/Month/Quarter or Category/Sub-Category) */}
-          {toggleConfig && (
-            <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-dark-border rounded-lg p-0.5">
-              {toggleConfig.options.map((opt) => (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* One pill-group per toggle config */}
+          {toggleConfigs?.map((cfg) => (
+            <div
+              key={cfg.key}
+              className="flex items-center gap-0.5 bg-slate-100 dark:bg-dark-border rounded-lg p-0.5"
+            >
+              {cfg.options.map((opt) => (
                 <button
                   key={opt.value}
-                  onClick={() => onOptionChange(toggleConfig.key, opt.value)}
+                  onClick={() => onOptionChange(cfg.key, opt.value)}
                   className={`
                     px-2.5 py-1 text-xs font-medium rounded-md transition-all duration-150
-                    ${currentOption === opt.value
+                    ${currentOptions?.[cfg.key] === opt.value
                       ? 'bg-white dark:bg-dark-card text-brand-blue shadow-sm'
                       : 'text-slate-500 dark:text-dark-muted hover:text-slate-700 dark:hover:text-slate-200'
                     }
@@ -127,7 +129,7 @@ export default function ChartCard({
                 </button>
               ))}
             </div>
-          )}
+          ))}
 
           {/* Click-to-filter badge */}
           {filterKey && (

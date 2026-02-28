@@ -10,10 +10,14 @@ import { fetchChart } from '../services/api'
 
 // Maps chart_id → which filter key a click on that chart updates
 const CHART_FILTER_MAP = {
-  sales_by_category:      'category',
-  sales_by_market_region: 'market',
-  segment_breakdown:      'segment',
-  ship_mode_priority:     'ship_mode',
+  ship_mode_priority: 'ship_mode',
+}
+
+// For dimension_explorer the filter key depends on the active dimension
+const DIMENSION_FILTER_MAP = {
+  category: 'category',
+  segment:  'segment',
+  market:   'market',
 }
 
 const KPI_CONFIGS = [
@@ -29,48 +33,80 @@ const KPI_CONFIGS = [
 
 // Charts that span full width
 const CHART_SPANS = {
-  sales_profit_trend:    'col-span-1 md:col-span-2',
-  sales_by_market_region:'col-span-1 md:col-span-2',
-  top_products:          'col-span-1 md:col-span-2',
-  discount_vs_profit:    'col-span-1 md:col-span-2',
-  ship_mode_priority:    'col-span-1 md:col-span-2',
+  sales_profit_trend:  'col-span-1 md:col-span-2',
+  dimension_explorer:  'col-span-1 md:col-span-2',
+  top_products:        'col-span-1 md:col-span-2',
+  discount_vs_profit:  'col-span-1 md:col-span-2',
+  ship_mode_priority:  'col-span-1 md:col-span-2',
 }
 
-// Visual-level toggle configurations per chart
+// Visual-level toggle configurations per chart (array of toggle groups)
 const CHART_TOGGLE_CONFIGS = {
-  sales_profit_trend: {
-    key: 'granularity',
-    defaultValue: 'month',
-    options: [
-      { value: 'week',    label: 'Week'    },
-      { value: 'month',   label: 'Month'   },
-      { value: 'quarter', label: 'Quarter' },
-    ],
-  },
+  sales_profit_trend: [
+    {
+      key: 'granularity',
+      defaultValue: 'month',
+      options: [
+        { value: 'week',    label: 'Week'    },
+        { value: 'month',   label: 'Month'   },
+        { value: 'quarter', label: 'Quarter' },
+      ],
+    },
+  ],
+  dimension_explorer: [
+    {
+      key: 'dimension',
+      defaultValue: 'category',
+      options: [
+        { value: 'category', label: 'Category' },
+        { value: 'segment',  label: 'Segment'  },
+        { value: 'market',   label: 'Market'   },
+      ],
+    },
+    {
+      key: 'chart_type',
+      defaultValue: 'donut',
+      options: [
+        { value: 'donut',   label: 'Donut'   },
+        { value: 'treemap', label: 'Treemap' },
+        { value: 'bar',     label: 'Bar'     },
+      ],
+    },
+    {
+      key: 'metric',
+      defaultValue: 'Sales',
+      options: [
+        { value: 'Sales',  label: 'Sales'  },
+        { value: 'Profit', label: 'Profit' },
+      ],
+    },
+  ],
 }
 
-// Initial chart options (all at their defaults)
+// Initial chart options driven by toggle configs
 const INITIAL_CHART_OPTIONS = Object.fromEntries(
-  Object.entries(CHART_TOGGLE_CONFIGS).map(([chartId, cfg]) => [
+  Object.entries(CHART_TOGGLE_CONFIGS).map(([chartId, cfgs]) => [
     chartId,
-    { [cfg.key]: cfg.defaultValue },
+    Object.fromEntries(cfgs.map((cfg) => [cfg.key, cfg.defaultValue])),
   ])
 )
 
 export default function DashboardPage() {
   const { sessionId, kpis, charts, sparklines, activeFilters, isLoading } = useDashboard()
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [chartOptions, setChartOptions]   = useState(INITIAL_CHART_OPTIONS)
-  const [chartOverrides, setChartOverrides] = useState({})  // { chart_id: ChartData }
-  const [chartLoading, setChartLoading]   = useState({})    // { chart_id: bool }
 
-  // When global filters change (charts prop updates), re-apply non-default chart options
+  // Default sidebar open on desktop (≥768px), closed on mobile
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768)
+  const [chartOptions, setChartOptions]     = useState(INITIAL_CHART_OPTIONS)
+  const [chartOverrides, setChartOverrides] = useState({})
+  const [chartLoading, setChartLoading]     = useState({})
+
+  // Re-apply non-default chart options when global filters change
   useEffect(() => {
     if (!sessionId || !charts.length) return
 
     const nonDefault = Object.entries(chartOptions).filter(([chartId, opts]) => {
-      const cfg = CHART_TOGGLE_CONFIGS[chartId]
-      return cfg && opts[cfg.key] !== cfg.defaultValue
+      const cfgs = CHART_TOGGLE_CONFIGS[chartId]
+      return cfgs && cfgs.some((cfg) => opts[cfg.key] !== cfg.defaultValue)
     })
 
     nonDefault.forEach(([chartId, opts]) => {
@@ -81,7 +117,6 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [charts])
 
-  // Called when a chart-level toggle is clicked
   const handleOptionChange = useCallback(
     async (chartId, optionKey, optionValue) => {
       const newOptions = { ...chartOptions[chartId], [optionKey]: optionValue }
@@ -112,6 +147,14 @@ export default function DashboardPage() {
         >
           {sidebarOpen ? <X size={20} /> : <SlidersHorizontal size={20} />}
         </button>
+
+        {/* Backdrop overlay — dims content on mobile when sidebar is open */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
         {/* Filter Sidebar */}
         <aside
@@ -154,10 +197,24 @@ export default function DashboardPage() {
             <p className="text-xs text-slate-500 dark:text-dark-muted mb-3">Interactive charts — click any segment to filter the dashboard</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
               {charts.map((chart) => {
-                const toggleCfg    = CHART_TOGGLE_CONFIGS[chart.chart_id] || null
-                const curOption    = toggleCfg
-                  ? (chartOptions[chart.chart_id]?.[toggleCfg.key] ?? toggleCfg.defaultValue)
-                  : null
+                const toggleCfgs = CHART_TOGGLE_CONFIGS[chart.chart_id] || null
+
+                // Resolve current options object for this chart
+                const curOptions = toggleCfgs
+                  ? Object.fromEntries(
+                      toggleCfgs.map((cfg) => [
+                        cfg.key,
+                        chartOptions[chart.chart_id]?.[cfg.key] ?? cfg.defaultValue,
+                      ])
+                    )
+                  : {}
+
+                // Dimension explorer filter key depends on active dimension
+                let filterKey = CHART_FILTER_MAP[chart.chart_id] || null
+                if (chart.chart_id === 'dimension_explorer') {
+                  filterKey = DIMENSION_FILTER_MAP[curOptions.dimension ?? 'category']
+                }
+
                 const overrideData = chartOverrides[chart.chart_id] || null
 
                 return (
@@ -165,11 +222,11 @@ export default function DashboardPage() {
                     key={chart.chart_id}
                     chart={chart}
                     overrideChart={overrideData}
-                    filterKey={CHART_FILTER_MAP[chart.chart_id] || null}
+                    filterKey={filterKey}
                     className={CHART_SPANS[chart.chart_id] || ''}
                     isLoading={isLoading || !!chartLoading[chart.chart_id]}
-                    toggleConfig={toggleCfg}
-                    currentOption={curOption}
+                    toggleConfigs={toggleCfgs}
+                    currentOptions={curOptions}
                     onOptionChange={(key, value) => handleOptionChange(chart.chart_id, key, value)}
                   />
                 )
