@@ -211,6 +211,9 @@ def _discount_vs_profit(df: pd.DataFrame) -> go.Figure:
         .agg(Discount=("Discount", "mean"), Profit=("Profit", "sum"), Sales=("Sales", "sum"))
         .reset_index()
     )
+    # Cap at 3 000 points — keeps Plotly JSON small and rendering fast
+    if len(order_data) > 3000:
+        order_data = order_data.sample(3000, random_state=42)
     fig = px.scatter(
         order_data, x="Discount", y="Profit",
         color="Category", size="Sales",

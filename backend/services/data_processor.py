@@ -110,10 +110,12 @@ def compute_sparklines(df: pd.DataFrame) -> dict:
     )
 
     # Repeat customer rate per period: % of that period's customers seen in a prior period
+    # Pre-group by period once (O(n)) instead of filtering per period (O(n*m))
+    customer_by_period = df.groupby("Period")["Customer ID"].apply(set)
     seen: set = set()
     repeat_rates = []
     for period in periods:
-        customers = set(df[df["Period"] == period]["Customer ID"].unique())
+        customers = customer_by_period.get(period, set())
         rate = round(len(customers & seen) / len(customers) * 100, 2) if customers else 0.0
         repeat_rates.append(rate)
         seen.update(customers)
