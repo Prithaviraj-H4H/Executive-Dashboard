@@ -6,3 +6,4 @@ backend/*.pyc
 .env
 frontend/.env
 backend/.env
+.claude/settings.local.json
