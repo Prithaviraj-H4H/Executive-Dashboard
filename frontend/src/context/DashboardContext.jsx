@@ -20,6 +20,7 @@ export function DashboardProvider({ children }) {
   const [sessionId, setSessionId] = useState(null)
   const [kpis, setKpis] = useState(null)
   const [charts, setCharts] = useState([])
+  const [sparklines, setSparklines] = useState({})
   const [filterOptions, setFilterOptions] = useState(null)
   const [activeFilters, setActiveFilters] = useState(EMPTY_FILTERS)
   const [rowCount, setRowCount] = useState(0)
@@ -34,6 +35,7 @@ export function DashboardProvider({ children }) {
       setSessionId(data.session_id)
       setKpis(data.kpis)
       setCharts(data.charts)
+      setSparklines(data.sparklines || {})
       setFilterOptions(data.filter_options)
       setRowCount(data.row_count)
       setActiveFilters(EMPTY_FILTERS)
@@ -55,6 +57,7 @@ export function DashboardProvider({ children }) {
         const data = await fetchDashboard(sessionId, updatedFilters)
         setKpis(data.kpis)
         setCharts(data.charts)
+        setSparklines(data.sparklines || {})
       } catch (err) {
         toast.error(err.message || 'Failed to apply filters.')
       } finally {
@@ -92,6 +95,7 @@ export function DashboardProvider({ children }) {
         sessionId,
         kpis,
         charts,
+        sparklines,
         filterOptions,
         activeFilters,
         rowCount,

@@ -21,28 +21,75 @@ function formatValue(value, prefix, suffix) {
   return num.toLocaleString()
 }
 
-export default function KPICard({ label, value, prefix, suffix, color = 'blue', loading, icon: Icon }) {
+function Sparkline({ data, colorClass }) {
+  if (!data || data.length < 2) return null
+  const min = Math.min(...data)
+  const max = Math.max(...data)
+  const range = max - min || 1
+  const W = 100
+  const H = 28
+
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * W
+    const y = H - ((v - min) / range) * (H - 3) - 1.5
+    return [x.toFixed(2), y.toFixed(2)]
+  })
+
+  const polyline = pts.map(([x, y]) => `${x},${y}`).join(' ')
+  const first = pts[0]
+  const last = pts[pts.length - 1]
+  const area = `M${first[0]},${first[1]} ${pts.slice(1).map(([x, y]) => `L${x},${y}`).join(' ')} L${last[0]},${H} L${first[0]},${H} Z`
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className={`w-full ${colorClass}`}
+      style={{ height: '28px' }}
+    >
+      <path d={area} fill="currentColor" opacity="0.12" />
+      <polyline
+        points={polyline}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.7"
+      />
+    </svg>
+  )
+}
+
+export default function KPICard({ label, value, prefix, suffix, color = 'blue', loading, icon: Icon, sparkline }) {
   const palette = COLOR_MAP[color] || COLOR_MAP.blue
 
   return (
-    <div className="card p-4 flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-dark-muted mb-1.5">
-          {label}
-        </p>
-        {loading || value === undefined ? (
-          <div className="h-7 w-28 rounded bg-slate-200 dark:bg-dark-border animate-pulse" />
-        ) : (
-          <p className={`text-2xl font-bold ${palette.value}`}>
-            {formatValue(value, prefix, suffix)}
+    <div className="card flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-dark-muted mb-1.5">
+            {label}
           </p>
+          {loading || value === undefined ? (
+            <div className="h-7 w-28 rounded bg-slate-200 dark:bg-dark-border animate-pulse" />
+          ) : (
+            <p className={`text-2xl font-bold ${palette.value}`}>
+              {formatValue(value, prefix, suffix)}
+            </p>
+          )}
+        </div>
+        {Icon && (
+          <div className={`shrink-0 p-3 rounded-xl ${palette.bg}`}>
+            <Icon size={22} className={palette.icon} />
+          </div>
         )}
       </div>
-      {Icon && (
-        <div className={`shrink-0 p-3 rounded-xl ${palette.bg}`}>
-          <Icon size={22} className={palette.icon} />
-        </div>
-      )}
+
+      {/* Sparkline */}
+      <div className="px-0 pb-0 mt-auto">
+        <Sparkline data={sparkline} colorClass={palette.value} />
+      </div>
     </div>
   )
 }

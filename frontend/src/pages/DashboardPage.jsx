@@ -10,11 +10,10 @@ import { fetchChart } from '../services/api'
 
 // Maps chart_id → which filter key a click on that chart updates
 const CHART_FILTER_MAP = {
-  sales_by_category:     'category',
-  sales_by_subcategory:  'sub_category',
-  sales_by_market_region:'market',
-  segment_breakdown:     'segment',
-  ship_mode_priority:    'ship_mode',
+  sales_by_category:      'category',
+  sales_by_market_region: 'market',
+  segment_breakdown:      'segment',
+  ship_mode_priority:     'ship_mode',
 }
 
 const KPI_CONFIGS = [
@@ -28,11 +27,13 @@ const KPI_CONFIGS = [
   { key: 'avg_discount',         label: 'Avg Discount',      suffix: '%', color: 'amber',  icon: Tag          },
 ]
 
-// Some charts span 2 columns for visual hierarchy
+// Charts that span full width
 const CHART_SPANS = {
-  sales_profit_trend:   'col-span-1 md:col-span-2',
-  sales_by_subcategory: 'col-span-1 md:col-span-2',
-  ship_mode_priority:   'col-span-1 md:col-span-2',
+  sales_profit_trend:    'col-span-1 md:col-span-2',
+  sales_by_market_region:'col-span-1 md:col-span-2',
+  top_products:          'col-span-1 md:col-span-2',
+  discount_vs_profit:    'col-span-1 md:col-span-2',
+  ship_mode_priority:    'col-span-1 md:col-span-2',
 }
 
 // Visual-level toggle configurations per chart
@@ -46,14 +47,6 @@ const CHART_TOGGLE_CONFIGS = {
       { value: 'quarter', label: 'Quarter' },
     ],
   },
-  sales_by_category: {
-    key: 'view',
-    defaultValue: 'category',
-    options: [
-      { value: 'category',     label: 'Category'     },
-      { value: 'sub_category', label: 'Sub-Category' },
-    ],
-  },
 }
 
 // Initial chart options (all at their defaults)
@@ -65,7 +58,7 @@ const INITIAL_CHART_OPTIONS = Object.fromEntries(
 )
 
 export default function DashboardPage() {
-  const { sessionId, kpis, charts, activeFilters, isLoading } = useDashboard()
+  const { sessionId, kpis, charts, sparklines, activeFilters, isLoading } = useDashboard()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [chartOptions, setChartOptions]   = useState(INITIAL_CHART_OPTIONS)
   const [chartOverrides, setChartOverrides] = useState({})  // { chart_id: ChartData }
@@ -148,6 +141,7 @@ export default function DashboardPage() {
                   suffix={cfg.suffix}
                   color={cfg.color}
                   icon={cfg.icon}
+                  sparkline={sparklines?.[cfg.key]}
                   loading={isLoading && !kpis}
                 />
               ))}

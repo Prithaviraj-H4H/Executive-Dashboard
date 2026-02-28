@@ -86,6 +86,53 @@ def compute_kpis(df: pd.DataFrame) -> KPIData:
     )
 
 
+def compute_sparklines(df: pd.DataFrame) -> dict:
+    df = df.copy()
+    df["Period"] = df["Order Date"].dt.to_period("M").dt.to_timestamp()
+    periods = sorted(df["Period"].unique())
+
+    grouped = (
+        df.groupby("Period")
+        .agg(
+            Sales=("Sales", "sum"),
+            Profit=("Profit", "sum"),
+            Orders=("Order ID", "nunique"),
+            ShippingCost=("Shipping Cost", "sum"),
+        )
+        .reindex(periods)
+        .fillna(0)
+        .reset_index()
+    )
+    grouped["ProfitMargin"] = (grouped["Profit"] / grouped["Sales"].replace(0, float("nan")) * 100).fillna(0)
+    grouped["AvgOrderValue"] = (grouped["Sales"] / grouped["Orders"].replace(0, float("nan"))).fillna(0)
+    grouped["AvgDiscount"] = (
+        df.groupby("Period")["Discount"].mean().mul(100).reindex(periods).fillna(0).values
+    )
+
+    # Repeat customer rate per period: % of that period's customers seen in a prior period
+    seen: set = set()
+    repeat_rates = []
+    for period in periods:
+        customers = set(df[df["Period"] == period]["Customer ID"].unique())
+        rate = round(len(customers & seen) / len(customers) * 100, 2) if customers else 0.0
+        repeat_rates.append(rate)
+        seen.update(customers)
+
+    def to_list(col):
+        return [round(float(v), 2) for v in col]
+
+    return {
+        "total_sales":          to_list(grouped["Sales"]),
+        "total_profit":         to_list(grouped["Profit"]),
+        "profit_margin":        to_list(grouped["ProfitMargin"]),
+        "total_orders":         to_list(grouped["Orders"]),
+        "repeat_customer_rate": repeat_rates,
+        "avg_order_value":      to_list(grouped["AvgOrderValue"]),
+        "total_shipping_cost":  to_list(grouped["ShippingCost"]),
+        "avg_discount":         to_list(grouped["AvgDiscount"]),
+    }
+
+
 def get_filter_options(df: pd.DataFrame) -> FilterOptions:
     categories = sorted(df["Category"].dropna().unique().tolist())
     sub_categories = {

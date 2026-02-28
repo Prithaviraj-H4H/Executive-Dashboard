@@ -54,8 +54,10 @@ class UploadResponse(BaseModel):
     charts: List[ChartData]
     filter_options: FilterOptions
     row_count: int
+    sparklines: Dict[str, List[float]] = {}
 
 
 class DashboardResponse(BaseModel):
     kpis: KPIData
     charts: List[ChartData]
+    sparklines: Dict[str, List[float]] = {}

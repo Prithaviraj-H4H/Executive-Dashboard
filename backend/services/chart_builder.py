@@ -25,9 +25,8 @@ def build_all_charts(df: pd.DataFrame) -> List[ChartData]:
     builders = [
         ("sales_profit_trend",    "Sales & Profit by Month",    lambda d: _sales_profit_trend(d, "month")),
         ("sales_by_category",     "Sales by Category",          lambda d: _sales_by_category(d, "category")),
-        ("sales_by_subcategory",  "Sales by Sub-Category",      _sales_by_subcategory),
-        ("sales_by_market_region","Sales by Market & Region",   _sales_by_market_region),
         ("segment_breakdown",     "Sales by Customer Segment",  _segment_breakdown),
+        ("sales_by_market_region","Sales by Market & Region",   _sales_by_market_region),
         ("top_products",          "Top 10 Products by Profit",  _top_products),
         ("discount_vs_profit",    "Discount vs Profit",         _discount_vs_profit),
         ("ship_mode_priority",    "Ship Mode & Order Priority", _ship_mode_priority),
@@ -51,11 +50,6 @@ def build_single_chart(df: pd.DataFrame, chart_id: str, options: Dict[str, Any])
         gran_label = {"week": "by Week", "month": "by Month", "quarter": "by Quarter"}[granularity]
         title = f"Sales & Profit {gran_label}"
         fig = _sales_profit_trend(df, granularity)
-
-    elif chart_id == "sales_by_category":
-        view = options.get("view", "category")
-        title = "Sales by Sub-Category" if view == "sub_category" else "Sales by Category"
-        fig = _sales_by_category(df, view)
 
     else:
         raise ValueError(f"Chart '{chart_id}' does not support per-chart options.")
@@ -165,22 +159,24 @@ def _sales_by_market_region(df: pd.DataFrame) -> go.Figure:
         hover_data={"Profit": ":,.0f", "Sales": ":,.0f"},
     )
     fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)", tickprefix="$")
+    fig.update_yaxes(showgrid=False, tickprefix="$")
     return fig
 
 
-# ── Chart 5: Sales by Customer Segment ────────────────────────────────────────
+# ── Chart 5: Sales by Customer Segment (Treemap) ──────────────────────────────
 def _segment_breakdown(df: pd.DataFrame) -> go.Figure:
-    seg = df.groupby("Segment").agg(Sales=("Sales", "sum")).reset_index()
-    fig = px.pie(
-        seg, values="Sales", names="Segment",
-        hole=0.48, color_discrete_sequence=px.colors.qualitative.Pastel,
+    seg = df.groupby("Segment").agg(Sales=("Sales", "sum"), Profit=("Profit", "sum")).reset_index()
+    fig = px.treemap(
+        seg, path=["Segment"], values="Sales",
+        color="Segment", color_discrete_sequence=COLORS,
+        custom_data=["Profit"],
     )
     fig.update_traces(
-        textposition="inside",
-        textinfo="percent+label",
-        hovertemplate="<b>%{label}</b><br>Sales: $%{value:,.0f}<br>Share: %{percent}<extra></extra>",
+        texttemplate="<b>%{label}</b><br>$%{value:,.0f}",
+        hovertemplate="<b>%{label}</b><br>Sales: $%{value:,.0f}<br>Profit: $%{customdata[0]:,.0f}<extra></extra>",
+        marker=dict(pad=dict(t=24, l=4, r=4, b=4)),
     )
+    fig.update_layout(margin=dict(l=8, r=8, t=8, b=8))
     return fig
 
 
@@ -203,7 +199,7 @@ def _top_products(df: pd.DataFrame) -> go.Figure:
         hovertemplate="<b>%{customdata[0]}</b><br>Profit: $%{x:,.0f}<extra></extra>",
     )
     fig.update_layout(coloraxis_showscale=False)
-    fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)", tickprefix="$")
+    fig.update_xaxes(showgrid=False, tickprefix="$")
     fig.update_yaxes(showgrid=False)
     return fig
 
@@ -223,13 +219,8 @@ def _discount_vs_profit(df: pd.DataFrame) -> go.Figure:
         hover_data={"Order ID": True, "Sales": ":,.0f", "Profit": ":,.0f"},
     )
     fig.update_traces(marker=dict(line=dict(width=0.5, color="rgba(255,255,255,0.4)")))
-    fig.update_xaxes(
-        tickformat=".0%", title_text="Discount Rate",
-        showgrid=True, gridcolor="rgba(128,128,128,0.15)",
-    )
-    fig.update_yaxes(
-        showgrid=True, gridcolor="rgba(128,128,128,0.15)", tickprefix="$",
-    )
+    fig.update_xaxes(tickformat=".0%", title_text="Discount Rate", showgrid=False)
+    fig.update_yaxes(showgrid=False, tickprefix="$")
     fig.add_hline(
         y=0, line_dash="dash",
         line_color="rgba(239,68,68,0.5)", line_width=1.5,
@@ -252,5 +243,5 @@ def _ship_mode_priority(df: pd.DataFrame) -> go.Figure:
         hovertemplate="<b>%{x}</b> — %{data.name}<br>Sales: $%{y:,.0f}<extra></extra>",
     )
     fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)", tickprefix="$")
+    fig.update_yaxes(showgrid=False, tickprefix="$")
     return fig

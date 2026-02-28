@@ -3,7 +3,7 @@ import io
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from models.schemas import UploadResponse
-from services.data_processor import load_and_validate, compute_kpis, get_filter_options, apply_filters
+from services.data_processor import load_and_validate, compute_kpis, get_filter_options, apply_filters, compute_sparklines
 from services.chart_builder import build_all_charts
 
 router = APIRouter()
@@ -33,6 +33,7 @@ async def upload_file(file: UploadFile = File(...)):
         charts=build_all_charts(df),
         filter_options=get_filter_options(df),
         row_count=len(df),
+        sparklines=compute_sparklines(df),
     )
 
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from models.schemas import FilterParams, DashboardResponse
-from services.data_processor import apply_filters, compute_kpis
+from services.data_processor import apply_filters, compute_kpis, compute_sparklines
 from services.chart_builder import build_all_charts
 from routers.upload import session_store
 
@@ -22,4 +22,5 @@ async def get_dashboard(params: FilterParams):
     return DashboardResponse(
         kpis=compute_kpis(filtered_df),
         charts=build_all_charts(filtered_df),
+        sparklines=compute_sparklines(filtered_df),
     )
